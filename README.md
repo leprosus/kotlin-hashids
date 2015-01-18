@@ -2,7 +2,7 @@
 
 A Kotlin class to generate YouTube-like hashes from one or many numbers.
 
-Ported from Java [Hashids.java](https://github.com/jiecao-fm/hashids-java/blob/master/src/main/java/org/hashids/Hashids.java) by [fanweixiao](https://github.com/fanweixiao) is port from javascript [hashids.js](https://github.com/ivanakimov/hashids.js/blob/master/lib/hashids.js) by [Ivan Akimov](https://github.com/ivanakimov)
+Ported from Java [Hashids.java](https://github.com/jiecao-fm/hashids-java/blob/master/src/main/java/org/hashids/Hashids.java) by [fanweixiao](https://github.com/fanweixiao) (is port of javascript [hashids.js](https://github.com/ivanakimov/hashids.js/blob/master/lib/hashids.js) by [Ivan Akimov](https://github.com/ivanakimov))
 
 ## What is it?
 
