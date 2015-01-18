@@ -24,7 +24,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     private var alphabet: String
     {
         this.salt = salt
-        this.length = if (length < 0) 0 else length
+        this.length = if (length > 0) length else 0
         this.alphabet = alphabet.unique()
 
         if (this.alphabet.length() < min)
@@ -47,8 +47,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
         this.alphabet = this.alphabet.replaceAll("\\s+", "")
         seps = seps.replaceAll("\\s+", "")
 
-        if (this.salt.length() > 0)
-            seps = consistentShuffle(seps, this.salt)
+        seps = consistentShuffle(seps, this.salt)
 
         if ((seps == "") || ((this.alphabet.length() / seps.length()) > sepsDiv)) {
             var sepsCount = getCount(this.alphabet.length(), sepsDiv)
@@ -81,8 +80,8 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Encrypt numbers to string
      *
-     * @param numbers the numbers to encrypt
-     * @return the encrypt string
+     * @param Numbers the numbers to encrypt
+     * @return The encrypt string
      */
     fun encode(vararg numbers: Long): String {
         if (numbers.size() == 0)
@@ -94,7 +93,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
 
         var numberHashInt: Int = 0
         for (i in numbers.indices)
-            numberHashInt += (numbers[i] % (i + 100).toLong()).toInt()
+            numberHashInt += (numbers[i] % (i + 100)).toInt()
 
         var alphabet = this.alphabet
         val retInt = alphabet.toCharArray()[numberHashInt % alphabet.length()]
@@ -106,6 +105,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
         var retString = retInt + ""
         var guard: Char
 
+
         for (i in numbers.indices) {
             num = numbers[i]
             buffer = retInt + salt + alphabet
@@ -116,34 +116,34 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
             retString += last
 
             if (i + 1 < numbers.size()) {
-                num %= (last.toCharArray()[0].toInt() + i).toLong()
-                sepsIndex = (num % seps.length().toLong()).toInt()
+                num %= (last.toCharArray()[0] + i)
+                sepsIndex = (num % seps.length()).toInt()
                 retString += seps.toCharArray()[sepsIndex]
             }
         }
 
         if (retString.length() < length) {
-            guardIndex = (numberHashInt + (retString.toCharArray()[0]).toInt()) % guards!!.length()
+            guardIndex = (numberHashInt + retString.toCharArray()[0]) % guards!!.length()
             guard = guards!!.toCharArray()[guardIndex]
 
             retString = guard + retString
 
             if (retString.length() < length) {
-                guardIndex = (numberHashInt + (retString.toCharArray()[2]).toInt()) % guards!!.length()
+                guardIndex = (numberHashInt + retString.toCharArray()[2]) % guards!!.length()
                 guard = guards!!.toCharArray()[guardIndex]
 
                 retString += guard
             }
         }
 
-        val halfLen = alphabet.length() / 2
+        val halfLength = alphabet.length() / 2
         while (retString.length() < length) {
             alphabet = consistentShuffle(alphabet, alphabet)
-            retString = alphabet.substring(halfLen) + retString + alphabet.substring(0, halfLen)
+            retString = alphabet.substring(halfLength) + retString + alphabet.substring(0, halfLength)
             val excess = retString.length() - length
             if (excess > 0) {
-                val start_pos = excess / 2
-                retString = retString.substring(start_pos, start_pos + length)
+                val position = excess / 2
+                retString = retString.substring(position, position + length)
             }
         }
 
@@ -153,8 +153,8 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Decrypt string to numbers
      *
-     * @param hash the encrypt string
-     * @return decryped numbers
+     * @param Hash the encrypt string
+     * @return Decryped numbers
      */
     fun decode(hash: String): LongArray {
         if (hash == "")
@@ -180,18 +180,16 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
         hashBreakdown = hashBreakdown.replaceAll("[" + seps + "]", " ")
         hashArray = hashBreakdown.split(" ")
 
-        val subHash: String
         val buffer: String
-        for (aHashArray in hashArray) {
-            subHash = aHashArray
+        for (subHash in hashArray) {
             buffer = lottery + salt + alphabet
             alphabet = consistentShuffle(alphabet, buffer.substring(0, alphabet.length()))
             retArray.add(unhash(subHash, alphabet))
         }
 
         var arr = LongArray(retArray.size())
-        for (k in arr.indices) {
-            arr[k] = retArray.get(k)
+        for (index in retArray.indices) {
+            arr[index] = retArray.get(index)
         }
 
         if (encode(*arr) != hash) {
@@ -204,8 +202,8 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Encrypt hexa to string
      *
-     * @param hexa the hexa to encrypt
-     * @return the encrypt string
+     * @param Hexa the hexa to encrypt
+     * @return The encrypt string
      */
     fun encodeHex(hexa: String): String {
         if (!hexa.matches("^[0-9a-fA-F]+$"))
@@ -226,8 +224,8 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Decrypt string to numbers
      *
-     * @param hash the encrypt string
-     * @return decryped numbers
+     * @param Hash the encrypt string
+     * @return Decryped numbers
      */
     fun decodeHex(hash: String): String {
         var result = ""
@@ -246,13 +244,16 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     private fun getCount(length: Int, div: Int): Int = getCount(length, div.toDouble())
 
     private fun consistentShuffle(alphabet: String, salt: String): String {
+        if (salt.length() <= 0)
+            return alphabet
+
         var shuffled = alphabet
 
         val saltArray = salt.toCharArray()
         val saltLength = salt.length()
-        val ascVal: Int
+        val integer: Int
         val j: Int
-        val tmp: Char
+        val temp: Char
 
         var i = shuffled.length() - 1
         var v = 0
@@ -260,13 +261,13 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
 
         while (i > 0) {
             v %= saltLength
-            ascVal = saltArray[v].toInt()
-            p += ascVal
-            j = (ascVal + v + p) % i
+            integer = saltArray[v].toInt()
+            p += integer
+            j = (integer + v + p) % i
 
-            tmp = shuffled.charAt(j)
+            temp = shuffled.charAt(j)
             shuffled = shuffled.substring(0, j) + shuffled.charAt(i) + shuffled.substring(j + 1)
-            shuffled = shuffled.substring(0, i) + tmp + shuffled.substring(i + 1)
+            shuffled = shuffled.substring(0, i) + temp + shuffled.substring(i + 1)
 
             i--
             v++
@@ -283,7 +284,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
 
         do {
             hash = array[(current % length.toLong()).toInt()] + hash
-            current /= length.toLong()
+            current /= length
         } while (current > 0)
 
         return hash
@@ -297,7 +298,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
 
         for (i in 0..length) {
             position = alphabet.indexOf(inputArray[i]).toLong()
-            number += (position.toDouble() * Math.pow(alphabet.length().toDouble(), input.length() - i - 1.toDouble())).toLong()
+            number += (position.toDouble() * Math.pow(alphabet.length().toDouble(), (input.length() - i - 1).toDouble())).toLong()
         }
 
         return number
