@@ -1,7 +1,7 @@
 package org.hashids
 
-import java.util.regex.Pattern
 import java.util.ArrayList
+import java.util.regex.Pattern
 
 /**
  * Hashids developed to generate short hashes from numbers (like YouTube).
@@ -22,7 +22,8 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     private var salt: String
     private var length: Int
     private var alphabet: String
-    {
+
+    init {
         this.salt = salt
         this.length = if (length > 0) length else 0
         this.alphabet = alphabet.unique()
@@ -80,7 +81,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Encrypt numbers to string
      *
-     * @param Numbers the numbers to encrypt
+     * @param numbers the numbers to encrypt
      * @return The encrypt string
      */
     fun encode(vararg numbers: Long): String {
@@ -153,8 +154,8 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Decrypt string to numbers
      *
-     * @param Hash the encrypt string
-     * @return Decryped numbers
+     * @param hash the encrypt string
+     * @return Decrypted numbers
      */
     fun decode(hash: String): LongArray {
         if (hash == "")
@@ -202,7 +203,7 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Encrypt hexa to string
      *
-     * @param Hexa the hexa to encrypt
+     * @param hexa the hexa to encrypt
      * @return The encrypt string
      */
     fun encodeHex(hexa: String): String {
@@ -224,8 +225,8 @@ public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abc
     /**
      * Decrypt string to numbers
      *
-     * @param Hash the encrypt string
-     * @return Decryped numbers
+     * @param hash the encrypt string
+     * @return Decrypted numbers
      */
     fun decodeHex(hash: String): String {
         var result = ""
