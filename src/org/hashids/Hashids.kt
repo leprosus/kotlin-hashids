@@ -8,7 +8,7 @@ import java.util.regex.Pattern
  * Can be used as forgotten password hashes, invitation codes, store shard numbers.
  * This is implementation of http://hashids.org
  *
- * @author leprosus <korolyoc.denis@gmail.com>
+ * @author leprosus <korolyov.denis@gmail.com>
  * @license MIT
  */
 public class Hashids(salt: String = "", length: Int = 0, alphabet: String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890") {
