@@ -1,7 +1,8 @@
 package org.hashids
 
-import java.util.ArrayList
-import java.util.regex.Pattern
+import java.lang.Long.toHexString
+import kotlin.math.ceil
+import kotlin.math.pow
 
 /**
  * Hashids developed to generate short hashes from numbers (like YouTube).
@@ -9,313 +10,308 @@ import java.util.regex.Pattern
  * This is implementation of http://hashids.org
  *
  * @author leprosus <korolyov.denis@gmail.com>
+ * @author spuklo <piszdomniejeszcze@gmail.com>
  * @license MIT
  */
-class Hashids(var salt: String = "", var length: Int = 0, alphabet: String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890") {
-    private val min: Int = 16
-    private val sepsDiv: Double = 3.5
-    private val guardDiv: Int = 12
 
-    private var seps: String = "cfhistuCFHISTU"
-    private var guards: String? = null
+class Hashids(salt: String = defaultSalt, minHashLength: Int = defaultMinimalHashLength, alphabet: String = defaultAlphabet) {
+    companion object {
+        const val defaultSalt = ""
+        const val defaultMinimalHashLength = 0
+        const val defaultAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+        const val defaultSeparators = "cfhistuCFHISTU"
+        const val minimalAlphabetLength = 16
+        const val separatorDiv = 3.5
+        const val guardDiv = 12
 
-    private var alphabet: String
+        private const val emptyString = ""
+        private const val space = " "
+        private const val maxNumber = 9007199254740992
+    }
 
-    init {
-        this.alphabet = alphabet.unique()
+    private val finalSalt = whatSalt(salt)
+    private val finalHashLength = whatHashLength(minHashLength)
+    private val alphabetSeparatorsAndGuards = calculateAlphabetAndSeparators(alphabet)
+    private val finalAlphabet = alphabetSeparatorsAndGuards.alphabet
+    private val finalSeparators = alphabetSeparatorsAndGuards.separators
+    private val finalGuards = alphabetSeparatorsAndGuards.guards
 
-        if (this.alphabet.length < min)
-            throw IllegalArgumentException("Alphabet must contain at least $min unique characters")
+    val version = "1.0.0"
 
-        /**
-         * seps should contain only characters present in alphabet;
-         * alphabet should not contains seps
-         */
-        val sepsLength = seps.length - 1
-        for (index in 0..sepsLength) {
-            val position = this.alphabet.indexOf(seps[index])
+    /**
+     * Encodes numbers to string
+     *
+     * @param numbers the numbers to encode
+     * @return The encoded string
+     */
+    fun encode(vararg numbers: Long): String = when {
+        numbers.isEmpty() -> emptyString
+        numbers.any { it > maxNumber } -> throw IllegalArgumentException("Number can not be greater than ${maxNumber}L")
+        else -> {
+            val numbersHash = numbers.indices
+                    .map { (numbers[it] % (it + 100)).toInt() }
+                    .sum()
 
-            if (position == -1) {
-                seps = seps.substring(0, index) + " " + seps.substring(index + 1)
-            } else {
-                this.alphabet = this.alphabet.substring(0, position) + " " + this.alphabet.substring(position + 1)
-            }
-        }
-        this.alphabet = this.alphabet.replace("\\s+".toRegex(), "")
-        seps = seps.replace("\\s+".toRegex(), "")
+            val initialCharacter = finalAlphabet.toCharArray()[numbersHash % finalAlphabet.length]
+            val (encodedString, encodingAlphabet) = initialEncode(numbers.asList(), finalSeparators.toCharArray(), initialCharacter.toString(), 0, finalAlphabet, initialCharacter.toString())
+            val tempReturnString = addGuardsIfNecessary(encodedString, numbersHash)
 
-        seps = consistentShuffle(seps, this.salt)
-
-        if ((seps == "") || ((this.alphabet.length / seps.length) > sepsDiv)) {
-            var sepsCount = getCount(this.alphabet.length, sepsDiv)
-
-            if (sepsCount == 1)
-                sepsCount++
-
-            if (sepsCount > seps.length) {
-                val diff = sepsCount - seps.length
-                seps += this.alphabet.substring(0, diff)
-                this.alphabet = this.alphabet.substring(diff)
-            } else {
-                seps = seps.substring(0, sepsCount)
-            }
-        }
-
-        this.alphabet = this.consistentShuffle(this.alphabet, this.salt)
-
-        val guardCount = getCount(this.alphabet.length, guardDiv)
-
-        if (this.alphabet.length < 3) {
-            guards = seps.substring(0, guardCount)
-            seps = seps.substring(guardCount)
-        } else {
-            guards = this.alphabet.substring(0, guardCount)
-            this.alphabet = this.alphabet.substring(guardCount)
+            val halfLength = finalAlphabet.length / 2
+            ensureMinimalLength(halfLength, encodingAlphabet, tempReturnString)
         }
     }
 
     /**
-     * Encrypt numbers to string
+     * Decodes string to numbers
      *
-     * @param numbers the numbers to encrypt
-     * @return The encrypt string
+     * @param hash the encoded string
+     * @return Decoded numbers
      */
-    fun encode(vararg numbers: Long): String {
-        if (numbers.isEmpty())
-            return ""
+    fun decode(hash: String): LongArray = when {
+        hash.isEmpty() -> longArrayOf()
+        else -> {
+            val guardsRegex = "[$finalGuards]".toRegex()
+            val hashWithSpacesInsteadOfGuards = hash.replace(guardsRegex, space)
+            val initialSplit = hashWithSpacesInsteadOfGuards.split(space)
 
-        for (number in numbers)
-            if (number > 9007199254740992)
-                throw IllegalArgumentException("Number can not be greater than 9007199254740992L")
+            val (lottery, hashBreakdown) = extractLotteryCharAndHashArray(initialSplit)
+            val returnValue = unhashSubHashes(hashBreakdown.iterator(), lottery, mutableListOf(), finalAlphabet)
 
-        var numberHashInt = 0
-        for (i in numbers.indices)
-            numberHashInt += (numbers[i] % (i + 100)).toInt()
-
-        var alphabet = this.alphabet
-        val retInt = alphabet.toCharArray()[numberHashInt % alphabet.length]
-
-        var num: Long
-        var sepsIndex: Int
-        var guardIndex: Int
-        var buffer: String
-        var retString = retInt + ""
-        var guard: Char
-
-
-        for (i in numbers.indices) {
-            num = numbers[i]
-            buffer = retInt + salt + alphabet
-
-            alphabet = consistentShuffle(alphabet, buffer.substring(0, alphabet.length))
-            val last = hash(num, alphabet)
-
-            retString += last
-
-            if (i + 1 < numbers.size) {
-                num %= (last.toCharArray()[0].toInt() + i)
-                sepsIndex = (num % seps.length).toInt()
-                retString += seps.toCharArray()[sepsIndex]
+            when {
+                encode(*returnValue) != hash -> longArrayOf()
+                else -> returnValue
             }
         }
+    }
 
-        if (retString.length < length) {
-            guardIndex = (numberHashInt + retString.toCharArray()[0].toInt()) % guards!!.length
-            guard = guards!!.toCharArray()[guardIndex]
+    private fun guardIndex(numbersHash: Int, returnString: String, index: Int): Int = (numbersHash + returnString.toCharArray()[index].toInt()) % finalGuards.length
 
-            retString = guard + retString
+    /**
+     * Encoded hex string to string
+     *
+     * @param hex the hex string to encode
+     * @return The encoded string
+     */
+    fun encodeHex(hex: String): String = when {
+        !hex.matches("^[0-9a-fA-F]+$".toRegex()) -> emptyString
+        else -> {
+            val toEncode = "[\\w\\W]{1,12}".toRegex().findAll(hex)
+                    .map { it.groupValues }
+                    .flatten()
+                    .map { it.toLong(16) }
+                    .toList()
+                    .toLongArray()
+            encode(*toEncode)
+        }
+    }
 
-            if (retString.length < length) {
-                guardIndex = (numberHashInt + retString.toCharArray()[2].toInt()) % guards!!.length
-                guard = guards!!.toCharArray()[guardIndex]
+    /**
+     * Decodes string to hex numbers string
+     *
+     * @param hash the encoded string
+     * @return decoded hex numbers string
+     */
+    fun decodeHex(hash: String): String = decode(hash)
+            .map { toHexString(it).substring(1) }
+            .toString()
 
-                retString += guard
+    private fun whatSalt(aSalt: String) = when {
+        aSalt.isEmpty() -> defaultSalt
+        else -> aSalt
+    }
+
+    private fun whatHashLength(aLength: Int) = when {
+        aLength > 0 -> aLength
+        else -> defaultMinimalHashLength
+    }
+
+    private fun calculateAlphabetAndSeparators(userAlphabet: String): AlphabetAndSeparators {
+        val uniqueAlphabet = unique(userAlphabet)
+        when {
+            uniqueAlphabet.length < minimalAlphabetLength -> throw IllegalArgumentException("alphabet must contain at least $minimalAlphabetLength unique characters")
+            uniqueAlphabet.contains(space) -> throw IllegalArgumentException("alphabet cannot contains spaces")
+            else -> {
+                val legalSeparators = defaultSeparators.toSet().intersect(uniqueAlphabet.toSet())
+                val alphabetWithoutSeparators = uniqueAlphabet.toSet().minus(legalSeparators).joinToString(emptyString)
+                val shuffledSeparators = consistentShuffle(legalSeparators.joinToString(emptyString), finalSalt)
+                val (adjustedAlphabet, adjustedSeparators) = adjustAlphabetAndSeparators(alphabetWithoutSeparators, shuffledSeparators)
+
+                val guardCount = ceil(adjustedAlphabet.length.toDouble() / guardDiv).toInt()
+                return if (adjustedAlphabet.length < 3) {
+                    val guards = adjustedSeparators.substring(0, guardCount)
+                    val seps = adjustedSeparators.substring(guardCount)
+                    AlphabetAndSeparators(adjustedAlphabet, seps, guards)
+                } else {
+                    val guards = adjustedAlphabet.substring(0, guardCount)
+                    val alphabet = adjustedAlphabet.substring(guardCount)
+                    AlphabetAndSeparators(alphabet, adjustedSeparators, guards)
+                }
             }
         }
+    }
 
-        val halfLength = alphabet.length / 2
-        while (retString.length < length) {
-            alphabet = consistentShuffle(alphabet, alphabet)
-            retString = alphabet.substring(halfLength) + retString + alphabet.substring(0, halfLength)
-            val excess = retString.length - length
-            if (excess > 0) {
+    private fun adjustAlphabetAndSeparators(alphabetWithoutSeparators: String, shuffledSeparators: String): AlphabetAndSeparators =
+            if (shuffledSeparators.isEmpty() ||
+                    (alphabetWithoutSeparators.length / shuffledSeparators.length).toFloat() > separatorDiv) {
+
+                val sepsLength = calculateSeparatorsLength(alphabetWithoutSeparators)
+
+                if (sepsLength > shuffledSeparators.length) {
+                    val difference = sepsLength - shuffledSeparators.length
+                    val seps = shuffledSeparators + alphabetWithoutSeparators.substring(0, difference)
+                    val alpha = alphabetWithoutSeparators.substring(difference)
+                    AlphabetAndSeparators(consistentShuffle(alpha, finalSalt), seps)
+                } else {
+                    val seps = shuffledSeparators.substring(0, sepsLength)
+                    AlphabetAndSeparators(consistentShuffle(alphabetWithoutSeparators, finalSalt), seps)
+                }
+            } else {
+                AlphabetAndSeparators(consistentShuffle(alphabetWithoutSeparators, finalSalt), shuffledSeparators)
+            }
+
+    private fun calculateSeparatorsLength(alphabet: String): Int = when (val s = ceil(alphabet.length / separatorDiv).toInt()) {
+        1 -> 2
+        else -> s
+    }
+
+    private fun unique(input: String) = input.toSet().joinToString(emptyString)
+
+    private fun addGuardsIfNecessary(encodedString: String, numbersHash: Int): String =
+            if (encodedString.length < finalHashLength) {
+                val guard0 = finalGuards.toCharArray()[guardIndex(numbersHash, encodedString, 0)]
+                val retString = guard0 + encodedString
+
+                if (retString.length < finalHashLength) {
+                    val guard2 = finalGuards.toCharArray()[guardIndex(numbersHash, retString, 2)]
+                    retString + guard2
+                } else {
+                    retString
+                }
+            } else {
+                encodedString
+            }
+
+    private fun extractLotteryCharAndHashArray(initialSplit: List<String>): Pair<Char, List<String>> {
+        val separatorsRegex = "[$finalSeparators]".toRegex()
+        val i = when {
+            initialSplit.size == 2 || initialSplit.size == 3 -> 1
+            else -> 0
+        }
+        val ithElementOfSplit = initialSplit[i]
+
+        val lotteryChar = ithElementOfSplit.first()
+        val finalBreakdown = ithElementOfSplit
+                .substring(1)
+                .replace(separatorsRegex, space)
+                .split(space)
+        return Pair(lotteryChar, finalBreakdown)
+    }
+
+    private tailrec fun unhashSubHashes(hashes: Iterator<String>, lottery: Char, currentReturn: MutableList<Long>, alphabet: String): LongArray {
+        return when {
+            hashes.hasNext() -> {
+                val subHash = hashes.next()
+                val buffer = "$lottery$finalSalt$alphabet"
+                val newAlphabet = consistentShuffle(alphabet, buffer.substring(0, alphabet.length))
+                currentReturn.add(unhash(subHash, newAlphabet))
+                unhashSubHashes(hashes, lottery, currentReturn, newAlphabet)
+            }
+            else -> currentReturn.toLongArray()
+        }
+    }
+
+    private fun hash(input: Long, alphabet: String): String =
+            doHash(input, alphabet.toCharArray(), HashData(emptyString, input)).hash
+
+    private tailrec fun doHash(number: Long, alphabet: CharArray, data: HashData): HashData = when {
+        data.current > 0 -> {
+            val newHashCharacter = alphabet[(data.current % alphabet.size.toLong()).toInt()]
+            val newCurrent = data.current / alphabet.size
+            doHash(number, alphabet, HashData("$newHashCharacter${data.hash}", newCurrent))
+        }
+        else -> data
+    }
+
+    private fun unhash(input: String, alphabet: String): Long =
+            doUnhash(input.toCharArray(), alphabet, alphabet.length.toDouble(), 0, 0)
+
+    private tailrec fun doUnhash(input: CharArray, alphabet: String, alphabetLengthDouble: Double, currentNumber: Long, currentIndex: Int): Long =
+            when {
+                currentIndex < input.size -> {
+                    val position = alphabet.indexOf(input[currentIndex])
+                    val newNumber = currentNumber + (position * alphabetLengthDouble.pow((input.size - currentIndex - 1))).toLong()
+                    doUnhash(input, alphabet, alphabetLengthDouble, newNumber, currentIndex + 1)
+                }
+                else -> currentNumber
+            }
+
+    private fun consistentShuffle(alphabet: String, salt: String) = when {
+        salt.isEmpty() -> alphabet
+        else -> {
+            val initial = ShuffleData(alphabet.toList(), salt, 0, 0)
+            shuffle(initial, alphabet.length - 1, 1).alphabet.joinToString(emptyString)
+        }
+    }
+
+    private tailrec fun shuffle(data: ShuffleData, currentPosition: Int, limit: Int): ShuffleData = when {
+        currentPosition < limit -> data
+        else -> {
+            val currentAlphabet = data.alphabet.toCharArray()
+            val saltReminder = data.saltReminder % data.salt.length
+            val asciiValue = data.salt[saltReminder].toInt()
+            val cumulativeValue = data.cumulative + asciiValue
+            val positionToSwap = (asciiValue + saltReminder + cumulativeValue) % currentPosition
+            currentAlphabet[positionToSwap] = currentAlphabet[currentPosition].also {
+                currentAlphabet[currentPosition] = currentAlphabet[positionToSwap]
+            }
+            shuffle(ShuffleData(currentAlphabet.toList(), data.salt, cumulativeValue, saltReminder + 1), currentPosition - 1, limit)
+        }
+    }
+
+    private tailrec fun initialEncode(numbers: List<Long>,
+                                      separators: CharArray,
+                                      bufferSeed: String,
+                                      currentIndex: Int,
+                                      alphabet: String,
+                                      currentReturnString: String): Pair<String, String> = when {
+        currentIndex < numbers.size -> {
+            val currentNumber = numbers[currentIndex]
+            val buffer = bufferSeed + finalSalt + alphabet
+            val nextAlphabet = consistentShuffle(alphabet, buffer.substring(0, alphabet.length))
+            val last = hash(currentNumber, nextAlphabet)
+
+            val newReturnString = if (currentIndex + 1 < numbers.size) {
+                val nextNumber = currentNumber % (last.toCharArray()[0].toInt() + currentIndex)
+                val sepsIndex = (nextNumber % separators.size).toInt()
+                currentReturnString + last + separators[sepsIndex]
+            } else {
+                currentReturnString + last
+            }
+            initialEncode(numbers, separators, bufferSeed, currentIndex + 1, nextAlphabet, newReturnString)
+        }
+        else -> Pair(currentReturnString, alphabet)
+    }
+
+    private tailrec fun ensureMinimalLength(halfLength: Int, alphabet: String, returnString: String): String = when {
+        returnString.length < finalHashLength -> {
+            val newAlphabet = consistentShuffle(alphabet, alphabet)
+            val tempReturnString = newAlphabet.substring(halfLength) + returnString + newAlphabet.substring(0, halfLength)
+            val excess = tempReturnString.length - finalHashLength
+            val newReturnString = if (excess > 0) {
                 val position = excess / 2
-                retString = retString.substring(position, position + length)
+                tempReturnString.substring(position, position + finalHashLength)
+            } else {
+                tempReturnString
             }
+            ensureMinimalLength(halfLength, newAlphabet, newReturnString)
         }
-
-        return retString
+        else -> returnString
     }
 
-    /**
-     * Decrypt string to numbers
-     *
-     * @param hash the encrypt string
-     * @return Decrypted numbers
-     */
-    fun decode(hash: String): LongArray {
-        if (hash == "")
-            return LongArray(0)
-
-        var alphabet = alphabet
-        val retArray = ArrayList<Long>()
-
-        var i = 0
-        val regexp = "[$guards]".toRegex()
-        var hashBreakdown = hash.replace(regexp, " ")
-        var hashArray = hashBreakdown.split(" ")
-
-        if (hashArray.size == 3 || hashArray.size == 2) {
-            i = 1
-        }
-
-        hashBreakdown = hashArray[i]
-
-        val lottery = hashBreakdown.toCharArray()[0]
-
-        hashBreakdown = hashBreakdown.substring(1)
-        hashBreakdown = hashBreakdown.replace("[$seps]".toRegex(), " ")
-        hashArray = hashBreakdown.split(" ")
-
-        var buffer: String
-        for (subHash in hashArray) {
-            buffer = lottery + salt + alphabet
-            alphabet = consistentShuffle(alphabet, buffer.substring(0, alphabet.length))
-            retArray.add(unhash(subHash, alphabet))
-        }
-
-        var arr = LongArray(retArray.size)
-        for (index in retArray.indices) {
-            arr[index] = retArray[index]
-        }
-
-        if (encode(*arr) != hash) {
-            arr = LongArray(0)
-        }
-
-        return arr
-    }
-
-    /**
-     * Encrypt hexa to string
-     *
-     * @param hexa the hexa to encrypt
-     * @return The encrypt string
-     */
-    fun encodeHex(hexa: String): String {
-        if (!hexa.matches("^[0-9a-fA-F]+$".toRegex()))
-            return ""
-
-        val matched = ArrayList<Long>()
-        val matcher = Pattern.compile("[\\w\\W]{1,12}").matcher(hexa)
-
-        while (matcher.find())
-            matched.add(java.lang.Long.parseLong("1" + matcher.group(), 16))
-
-        val result = LongArray(matched.size)
-        for (i in matched.indices) result[i] = matched[i]
-
-        return encode(*result)
-    }
-
-    /**
-     * Decrypt string to numbers
-     *
-     * @param hash the encrypt string
-     * @return Decrypted numbers
-     */
-    fun decodeHex(hash: String): String {
-        var result = ""
-        val numbers = decode(hash)
-
-        for (number in numbers) {
-            result += java.lang.Long.toHexString(number).substring(1)
-        }
-
-        return result
-    }
-
-
-    private fun getCount(length: Int, div: Double): Int = Math.ceil(length.toDouble() / div).toInt()
-
-    private fun getCount(length: Int, div: Int): Int = getCount(length, div.toDouble())
-
-    private fun consistentShuffle(alphabet: String, salt: String): String {
-        if (salt.isEmpty())
-            return alphabet
-
-        var shuffled = alphabet
-
-        val saltArray = salt.toCharArray()
-        val saltLength = salt.length
-        var integer: Int
-        var j: Int
-        var temp: Char
-
-        var i = shuffled.length - 1
-        var v = 0
-        var p = 0
-
-        while (i > 0) {
-            v %= saltLength
-            integer = saltArray[v].toInt()
-            p += integer
-            j = (integer + v + p) % i
-
-            temp = shuffled[j]
-            shuffled = shuffled.substring(0, j) + shuffled[i] + shuffled.substring(j + 1)
-            shuffled = shuffled.substring(0, i) + temp + shuffled.substring(i + 1)
-
-            i--
-            v++
-        }
-
-        return shuffled
-    }
-
-    private fun hash(input: Long, alphabet: String): String {
-        var current = input
-        var hash = ""
-        val length = alphabet.length
-        val array = alphabet.toCharArray()
-
-        do {
-            hash = array[(current % length.toLong()).toInt()] + hash
-            current /= length
-        } while (current > 0)
-
-        return hash
-    }
-
-    private fun unhash(input: String, alphabet: String): Long {
-        var number: Long = 0
-        var position: Long
-        val inputArray = input.toCharArray()
-        val length = input.length - 1
-
-        for (i in 0..length) {
-            position = alphabet.indexOf(inputArray[i]).toLong()
-            number += (position.toDouble() * Math.pow(alphabet.length.toDouble(), (input.length - i - 1).toDouble())).toLong()
-        }
-
-        return number
-    }
-
-    fun getVersion(): String {
-        return "1.0.0"
-    }
-
-    fun kotlin.String.unique(): kotlin.String {
-        var unique = ""
-        val length = this.length - 1
-
-        for (index in 0..length) {
-            val current: kotlin.String = "" + this[index]
-
-            if (!unique.contains(current) && current != " ")
-                unique += current
-        }
-
-        return unique
-    }
 }
+
+private data class AlphabetAndSeparators(val alphabet: String, val separators: String, val guards: String = "")
+
+private data class ShuffleData(val alphabet: List<Char>, val salt: String, val cumulative: Int, val saltReminder: Int)
+
+private data class HashData(val hash: String, val current: Long)

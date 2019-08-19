@@ -17,6 +17,19 @@ class HashidsTest {
     }
 
     @Test
+    fun `should follow examples from main project page`() {
+        val noSaltHashids = Hashids()
+        val examples = mapOf("o2fXhV" to longArrayOf(1, 2, 3),
+                "pYfzhG" to longArrayOf(1, 2, 4),
+                "qxfOhN" to longArrayOf(1, 2, 5),
+                "rkfAhN" to longArrayOf(1, 2, 6),
+                "v2fWhy" to longArrayOf(1, 2, 7))
+
+        examples.map { it.key to noSaltHashids.encode(*it.value) }.forEach { assertEquals(it.first, it.second) }
+        examples.map { noSaltHashids.decode(it.key) to it.value }.forEach { assertTrue(Arrays.equals(it.first, it.second)) }
+    }
+
+    @Test
     fun `should encode large numbers`() {
         val numberToHash = 9007199254740992L
         val encode = hashids.encode(numberToHash)
@@ -112,7 +125,7 @@ class HashidsTest {
 
         val encoded = hashids.encode(*numberToHash)
         assertEquals(encoded, expected)
-        
+
         val decoded = hashids.decode(expected)
         assertEquals(numberToHash.size, decoded.size)
         assertTrue(Arrays.equals(decoded, numberToHash))
