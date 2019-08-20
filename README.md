@@ -154,7 +154,7 @@ val hash5: String = hashids.encode(5) /* rD */
 
 ## Contact
 
-Follow me [@leprosus](https://twitter.com/leprosus_ru), [@IvanAkimov](http://twitter.com/ivanakimov), [@fanweixiao](https://twitter.com/fanweixiao)
+Follow me [@spuklo](https://twitter.com/spuklo), [@leprosus](https://twitter.com/leprosus_ru), [@IvanAkimov](http://twitter.com/ivanakimov), [@fanweixiao](https://twitter.com/fanweixiao)
 
 ## License
 
