@@ -24,6 +24,8 @@ class Hashids(salt: String = defaultSalt, minHashLength: Int = defaultMinimalHas
         const val separatorDiv = 3.5
         const val guardDiv = 12
 
+        const val version = "1.1.0"
+
         private const val emptyString = ""
         private const val space = " "
         private const val maxNumber = 9007199254740992
@@ -36,7 +38,6 @@ class Hashids(salt: String = defaultSalt, minHashLength: Int = defaultMinimalHas
     private val finalSeparators = alphabetSeparatorsAndGuards.separators
     private val finalGuards = alphabetSeparatorsAndGuards.guards
 
-    val version = "1.0.0"
 
     /**
      * Encodes numbers to string

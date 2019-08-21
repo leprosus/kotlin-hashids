@@ -1,4 +1,3 @@
-
 import org.hashids.Hashids
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -8,7 +7,6 @@ import org.junit.jupiter.api.Test
 import java.util.Arrays
 
 class HashidsTest {
-
     private var hashids: Hashids = Hashids()
 
     @BeforeEach
