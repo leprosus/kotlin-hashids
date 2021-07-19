@@ -1,15 +1,15 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.jetbrains.kotlin.jvm").version("1.3.41")
+    id("org.jetbrains.kotlin.jvm").version("1.5.21")
 }
 
-version = "1.0.4"
+version = "1.1.0"
 group = "org.hashids"
 description = "Kotlin implementation of Hashids https://hashids.org"
 
 repositories {
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
